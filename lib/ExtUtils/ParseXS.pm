@@ -17,7 +17,7 @@ my(@XSStack);	# Stack of conditionals and INCLUDEs
 my($XSS_work_idx, $cpp_next_tmp);
 
 use vars qw($VERSION);
-$VERSION = '2.08';
+$VERSION = '2.09';
 
 use vars qw(%input_expr %output_expr $ProtoUsed @InitFileCode $FH $proto_re $Overload $errors $Fallback
 	    $cplusplus $hiertype $WantPrototypes $WantVersionChk $except $WantLineNumbers
@@ -259,7 +259,20 @@ EOM
       my $podstartline = $.;
       do {
 	if (/^=cut\s*$/) {
-	  print("/* Skipped embedded POD. */\n");
+	  # We can't just write out a /* */ comment, as our embedded
+	  # POD might itself be in a comment. We can't put a /**/
+	  # comment inside #if 0, as the C standard says that the source
+	  # file is decomposed into preprocessing characters in the stage
+	  # before preprocessing commands are executed.
+	  # I don't want to leave the text as barewords, because the spec
+	  # isn't clear whether macros are expanded before or after
+	  # preprocessing commands are executed, and someone pathological
+	  # may just have defined one of the 3 words as a macro that does
+	  # something strange. Multiline strings are illegal in C, so
+	  # the "" we write must be a string literal. And they aren't
+	  # concatenated until 2 steps later, so we are safe.
+	  #     - Nicholas Clark
+	  print("#if 0\n  \"Skipped embedded POD.\"\n#endif\n");
 	  printf("#line %d \"$filepathname\"\n", $. + 1)
 	    if $WantLineNumbers;
 	  next firstmodule
@@ -277,7 +290,10 @@ EOM
     
     print $_;
   }
-  die "Didn't find a 'MODULE ... PACKAGE ... PREFIX' line\n" unless defined $_;
+  unless (defined $_) {
+    warn "Didn't find a 'MODULE ... PACKAGE ... PREFIX' line\n";
+    exit 0; # Not a fatal error for the caller process
+  }
 
     print <<"EOF";
 #ifndef PERL_UNUSED_VAR

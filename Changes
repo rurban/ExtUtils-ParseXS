@@ -1,5 +1,16 @@
 Revision history for Perl extension ExtUtils::ParseXS.
 
+2.09  Sun Mar 27 11:11:49 CST 2005
+
+ - Integrated change #18270 from the perl core, which fixed a problem
+   in which xsubpp can make nested comments in C code (which is
+   bad). [Nicholas Clark]
+
+ - When no "MODULE ... PACKAGE ... PREFIX" line is found, it's now
+   still a fatal error for ParseXS, but we exit with status 0, which
+   is what the old xsubpp did and seems to work best with some modules
+   like Win32::NetAdmin.  See RT ticket 11472. [Steve Hay]
+
 2.08  Fri Feb 20 21:41:22 CST 2004
 
  - Fixed a problem with backslashes in file paths (e.g. C:\Foo\Bar.xs)
@@ -59,7 +70,7 @@ Revision history for Perl extension ExtUtils::ParseXS.
 2.01  Thu Mar 20 08:22:36 CST 2003
 
  - Allow -C++ flag for backward compatibility.  It's a no-op, and has
-   been since perl5.003_07. [crazyinsomniac@yahoo.com]
+   been since perl5.003_07. [PodMaster]
 
 2.00  Sun Feb 23 16:40:17 CST 2003
 
