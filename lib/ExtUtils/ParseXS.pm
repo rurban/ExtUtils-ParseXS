@@ -17,7 +17,7 @@ my(@XSStack);	# Stack of conditionals and INCLUDEs
 my($XSS_work_idx, $cpp_next_tmp);
 
 use vars qw($VERSION);
-$VERSION = '2.06';
+$VERSION = '2.07';
 
 use vars qw(%input_expr %output_expr $ProtoUsed @InitFileCode $FH $proto_re $Overload $errors $Fallback
 	    $cplusplus $hiertype $WantPrototypes $WantVersionChk $except $WantLineNumbers
@@ -1805,7 +1805,8 @@ sub map_type {
 
 
 #########################################################
-package ExtUtils::ParseXS::CountLines;
+package
+  ExtUtils::ParseXS::CountLines;
 use strict;
 use vars qw($SECTION_END_MARKER);
 
@@ -1973,9 +1974,9 @@ encountered during processing of the XS file.
 
 =head1 AUTHOR
 
-Original code for ExtUtils::xsubpp script was written by Larry Wall.
+Based on xsubpp code, written by Larry Wall.
 
-Adapted into ExtUtils::ParseXS module by Ken Williams, <ken@mathforum.org>
+Maintained by Ken Williams, <ken@mathforum.org>
 
 =head1 COPYRIGHT
 
