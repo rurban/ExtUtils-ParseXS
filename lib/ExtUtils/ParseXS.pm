@@ -9,7 +9,7 @@ require Exporter;
 
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(process_file);
-$VERSION = '1.99';
+$VERSION = '2.00';
 
 #use strict;  # That'll always be the dream...
 
@@ -88,6 +88,7 @@ sub process_file {
   # other kind of reference, trust them that we can print to it.
   if (not ref $args{output}) {
     open my($fh), "> $args{output}" or die "Can't create $args{output}: $!";
+    $args{outfile} = $args{output};
     $args{output} = $fh;
   }
 
@@ -100,11 +101,15 @@ sub process_file {
   $pwd = cwd();
   
   if ($WantLineNumbers) {
-    my $cfile = $filename;
-    $cfile =~ s/\.xs$/.c/i or $cfile .= ".c";
+    my $cfile;
+    if ( $args{outfile} ) {
+      $cfile = $args{outfile};
+    } else {
+      $cfile = $filename;
+      $cfile =~ s/\.xs$/.c/i or $cfile .= ".c";
+    }
     tie(*PSEUDO_STDOUT, 'ExtUtils::ParseXS::CountLines', $cfile, $args{output});
     select PSEUDO_STDOUT;
-
   } else {
     select $args{output};
   }
@@ -254,6 +259,13 @@ EOM
     print $_;
   }
   die "Didn't find a 'MODULE ... PACKAGE ... PREFIX' line\n" unless defined $_;
+
+    print <<"EOF";
+#ifndef PERL_UNUSED_VAR
+#  define PERL_UNUSED_VAR(var) if (0) var = var
+#endif
+
+EOF
 
   print "$ExtUtils::ParseXS::CountLines::SECTION_END_MARKER\n" if $WantLineNumbers;
 
@@ -783,7 +795,7 @@ EOF
 	push @proto_arg, "$s\@"
 	  if $elipsis ;
 	
-	$proto = join ("", @proto_arg);
+	$proto = join ("", grep defined, @proto_arg);
       }
       else {
 	# User has specified a prototype
@@ -921,6 +933,8 @@ EOF
 
   chdir($orig_cwd);
   select($orig_fh);
+  untie *PSEUDO_STDOUT if tied *PSEUDO_STDOUT;
+
   return 1;
 }
 
@@ -1804,7 +1818,9 @@ sub DESTROY {
   print {$self->{fh}} $self->{buffer};
 }
 
-
+sub UNTIE {
+  # This sub does nothing, but is neccessary for references to be released.
+}
 
 
 

@@ -16,6 +16,11 @@ chdir 't';
 
 use Carp; $SIG{__WARN__} = \&Carp::cluck;
 
+my $Is_MSWin32 = $^O eq 'MSWin32';
+my $BCC   = $Is_MSWin32 && $Config{cc} =~ /bcc32(\.exe)?$/;
+my $MSVC  = $Is_MSWin32 && $Config{cc} =~ /cl(\.exe)?$/;
+my $MinGW = $Is_MSWin32 && $Config{cc} =~ /gcc(\.exe)?$/;
+
 #########################
 
 # Try sending to filehandle
@@ -29,14 +34,12 @@ ok -e 'XSTest.c', 1, "Create an output file";
 
 # Try to compile the file!  Don't get too fancy, though.
 if (have_compiler()) {
-  my $corelib = File::Spec->catdir($Config{archlib}, 'CORE');
-  my $o_file = "XSTest$Config{obj_ext}";
+  my $module = 'XSTest';
 
-  ok !do_system("$Config{cc} -c $Config{ccflags} -I$corelib -o $o_file XSTest.c");
-  ok -e $o_file, 1, "Make sure $o_file exists";
-  
-  my $lib_file = "XSTest.$Config{dlext}";
-  ok !do_system("$Config{shrpenv} $Config{ld} $Config{lddlflags} -o $lib_file $o_file");
+  ok do_compile( $module );
+  ok -e $module.$Config{obj_ext}, 1, "Make sure $module exists";
+
+  ok do_link( $module );
 
   eval {require XSTest};
   ok $@, '';
@@ -51,10 +54,15 @@ if (have_compiler()) {
 
 sub find_in_path {
   my $thing = shift;
-  my @path = split ':', $ENV{PATH};
+  my @path = split $Config{path_sep}, $ENV{PATH};
+  my @exe_ext = $Is_MSWin32 ?
+    split($Config{path_sep}, $ENV{PATHEXT} || '.com;.exe;.bat') :
+    ('');
   foreach (@path) {
     my $fullpath = File::Spec->catfile($_, $thing);
-    return $fullpath if -e $fullpath;
+    foreach my $ext ( @exe_ext ) {
+      return "$fullpath$ext" if -e "$fullpath$ext";
+    }
   }
   return;
 }
@@ -70,6 +78,52 @@ sub have_compiler {
     return 0 unless -x $things{$_};
   }
   return 1;
+}
+
+sub do_compile {
+  my $module   = shift;
+  my $module_o = "$module$Config{obj_ext}";
+  my $corelib  = File::Spec->catdir($Config{archlib}, 'CORE');
+  my $cc_out   = $MSVC ? '-Fo' : $BCC ? '-o' : '-o ';
+  return !do_system("$Config{cc} -c $Config{ccflags} -I$corelib $cc_out$module_o $module.c");
+}
+
+sub do_link {
+  my $module     = shift;
+  my $module_lib = "$module.$Config{dlext}";
+  my $module_def = '';
+
+  my $objs      = "$module$Config{obj_ext}";
+  my $libs      = $Config{libs};
+  my $lddlflags = $Config{lddlflags};
+  my $ld_out    = '-o ';
+
+  if ( $Is_MSWin32 ) {
+    require ExtUtils::Mksymlists;
+    ExtUtils::Mksymlists::Mksymlists(
+      'NAME' => $module, 'DLBASE' => $module, 'IMPORTS' => {} );
+
+    if      ( $MSVC  ) { # Microsoft
+      $ld_out     = '-out:';
+      $libs      .= " $Config{libperl}";
+      $module_def = "-def:$module.def";
+    } elsif ( $BCC   ) { # Borland
+      $objs       = "c0d32.obj $objs"; # Borland's startup obj; must be before others
+      $ld_out     = '';
+      $module_lib = ",$module_lib";
+      $libs       = ",,$Config{libperl} $libs";
+      $module_def = ",$module.def";
+    } elsif ( $MinGW ) { # MinGW GCC
+      (my $libperl = $Config{libperl}) =~ s/^(?:lib)?([^.]+).*$/$1/;
+      $libs        = "-l$libperl $libs";
+      do_system("dlltool --def $module.def --output-exp $module.exp");
+      do_system("$Config{ld} $lddlflags -Wl,--base-file -Wl,$module.base $objs $ld_out$module_lib $libs $module.exp");
+      do_system("dlltool --def $module.def --output-exp $module.exp --base-file $module.base");
+      $module_def  = "$module.exp";
+    }
+  }
+
+  return !do_system("$Config{shrpenv} $Config{ld} $lddlflags $objs $ld_out$module_lib $libs $module_def");
 }
 
 sub do_system {
