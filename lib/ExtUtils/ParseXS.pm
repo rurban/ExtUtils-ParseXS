@@ -17,7 +17,7 @@ my(@XSStack);	# Stack of conditionals and INCLUDEs
 my($XSS_work_idx, $cpp_next_tmp);
 
 use vars qw($VERSION);
-$VERSION = '2.07';
+$VERSION = '2.08';
 
 use vars qw(%input_expr %output_expr $ProtoUsed @InitFileCode $FH $proto_re $Overload $errors $Fallback
 	    $cplusplus $hiertype $WantPrototypes $WantVersionChk $except $WantLineNumbers
@@ -95,6 +95,7 @@ sub process_file {
     die "Missing required parameter 'filename'" unless $_;
     $filepathname = $_;
     ($dir, $filename) = (dirname($_), basename($_));
+    $filepathname =~ s/\\/\\\\/g;
     $IncludedFiles{$_}++;
   }
   
@@ -122,7 +123,7 @@ sub process_file {
     if ( $args{outfile} ) {
       $cfile = $args{outfile};
     } else {
-      $cfile = $filepathname;
+      $cfile = $args{filename};
       $cfile =~ s/\.xs$/.c/i or $cfile .= ".c";
     }
     tie(*PSEUDO_STDOUT, 'ExtUtils::ParseXS::CountLines', $cfile, $args{output});
@@ -285,7 +286,7 @@ EOM
 
 EOF
 
-  print "$ExtUtils::ParseXS::CountLines::SECTION_END_MARKER\n" if $WantLineNumbers;
+  print 'ExtUtils::ParseXS::CountLines'->end_marker, "\n" if $WantLineNumbers;
 
   $lastline    = $_;
   $lastline_no = $.;
@@ -1023,7 +1024,7 @@ sub print_section {
     for (;  defined($_) && !/^$BLOCK_re/o;  $_ = shift(@line)) {
 	print "$_\n";
     }
-    print "$ExtUtils::ParseXS::CountLines::SECTION_END_MARKER\n" if $WantLineNumbers;
+    print 'ExtUtils::ParseXS::CountLines'->end_marker, "\n" if $WantLineNumbers;
 }
 
 sub merge_section {
@@ -1812,6 +1813,7 @@ use vars qw($SECTION_END_MARKER);
 
 sub TIEHANDLE {
   my ($class, $cfile, $fh) = @_;
+  $cfile =~ s/\\/\\\\/g;
   $SECTION_END_MARKER = qq{#line --- "$cfile"};
   
   return bless {buffer => '',
@@ -1849,7 +1851,9 @@ sub UNTIE {
   # This sub does nothing, but is neccessary for references to be released.
 }
 
-
+sub end_marker {
+  return $SECTION_END_MARKER;
+}
 
 
 1;
