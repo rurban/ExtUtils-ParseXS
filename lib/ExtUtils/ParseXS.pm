@@ -10,12 +10,27 @@ require Exporter;
 
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(process_file);
-$VERSION = '2.04';
 
-#use strict;  # That'll always be the dream...
+# use strict;  # One of these days...
 
 my(@XSStack);	# Stack of conditionals and INCLUDEs
 my($XSS_work_idx, $cpp_next_tmp);
+
+use vars qw($VERSION);
+$VERSION = '2.05';
+
+use vars qw(%input_expr %output_expr $ProtoUsed @InitFileCode $FH $proto_re $Overload $errors $Fallback
+	    $cplusplus $hiertype $WantPrototypes $WantVersionChk $except $WantLineNumbers
+	    $WantOptimize $process_inout $process_argtypes @tm
+	    $dir $filename $filepathname %IncludedFiles
+	    %type_kind %proto_letter
+            %targetable $BLOCK_re $lastline $lastline_no
+            $Package $Prefix @line @BootCode %args_match %defaults %var_types %arg_list @proto_arg
+            $processing_arg_with_types %argtype_seen @outlist %in_out %lengthof
+            $proto_in_this_xsub $scope_in_this_xsub $interface $prepush_done $interface_macro $interface_macro_set
+            $ProtoThisXSUB $ScopeThisXSUB $xsreturn
+            @line_no $ret_type $func_header $orig_args
+	   ); # Add these just to get compilation to happen.
 
 
 sub process_file {
@@ -78,6 +93,7 @@ sub process_file {
   
   for ($args{filename}) {
     die "Missing required parameter 'filename'" unless $_;
+    $filepathname = $_;
     ($dir, $filename) = (dirname($_), basename($_));
     $IncludedFiles{$_}++;
   }
@@ -99,14 +115,14 @@ sub process_file {
   my $orig_fh = select();
   
   chdir($dir);
-  $pwd = cwd();
+  my $pwd = cwd();
   
   if ($WantLineNumbers) {
     my $cfile;
     if ( $args{outfile} ) {
       $cfile = $args{outfile};
     } else {
-      $cfile = $filename;
+      $cfile = $filepathname;
       $cfile =~ s/\.xs$/.c/i or $cfile .= ".c";
     }
     tie(*PSEUDO_STDOUT, 'ExtUtils::ParseXS::CountLines', $cfile, $args{output});
@@ -121,16 +137,16 @@ sub process_file {
 
   push @tm, standard_typemap_locations();
 
-  foreach $typemap (@tm) {
+  foreach my $typemap (@tm) {
     next unless -f $typemap ;
     # skip directories, binary files etc.
     warn("Warning: ignoring non-text typemap file '$typemap'\n"), next
       unless -T $typemap ;
     open(TYPEMAP, $typemap)
       or warn ("Warning: could not open typemap file '$typemap': $!\n"), next;
-    $mode = 'Typemap';
-    $junk = "" ;
-    $current = \$junk;
+    my $mode = 'Typemap';
+    my $junk = "" ;
+    my $current = \$junk;
     while (<TYPEMAP>) {
       next if /^\s*		#/;
         my $line_no = $. + 1;
@@ -173,15 +189,16 @@ sub process_file {
     close(TYPEMAP);
   }
 
-  foreach $key (keys %input_expr) {
+  foreach my $key (keys %input_expr) {
     $input_expr{$key} =~ s/;*\s+\z//;
   }
 
+  my ($bal, $cast, $size);
   $bal = qr[(?:(?>[^()]+)|\((??{ $bal })\))*]; # ()-balanced
   $cast = qr[(?:\(\s*SV\s*\*\s*\)\s*)?]; # Optional (SV*) cast
   $size = qr[,\s* (??{ $bal }) ]x; # Third arg (to setpvn)
 
-  foreach $key (keys %output_expr) {
+  foreach my $key (keys %output_expr) {
     use re 'eval';
 
     my ($t, $with_size, $arg, $sarg) =
@@ -195,7 +212,7 @@ sub process_file {
     $targetable{$key} = [$t, $with_size, $arg, $sarg] if $t;
   }
 
-  $END = "!End!\n\n";		# "impossible" keyword (multiple newline)
+  my $END = "!End!\n\n";		# "impossible" keyword (multiple newline)
 
   # Match an XS keyword
   $BLOCK_re= '\s*(' . join('|', qw(
@@ -232,7 +249,7 @@ sub process_file {
 EOM
 
 
-  print("#line 1 \"$filename\"\n")
+  print("#line 1 \"$filepathname\"\n")
     if $WantLineNumbers;
 
   firstmodule:
@@ -242,7 +259,7 @@ EOM
       do {
 	if (/^=cut\s*$/) {
 	  print("/* Skipped embedded POD. */\n");
-	  printf("#line %d \"$filename\"\n", $. + 1)
+	  printf("#line %d \"$filepathname\"\n", $. + 1)
 	    if $WantLineNumbers;
 	  next firstmodule
 	}
@@ -254,8 +271,8 @@ EOM
       die ("Error: Unterminated pod in $filename, line $podstartline\n")
 	unless $lastline;
     }
-    last if ($Module, $Package, $Prefix) =
-      /^MODULE\s*=\s*([\w:]+)(?:\s+PACKAGE\s*=\s*([\w:]+))?(?:\s+PREFIX\s*=\s*(\S+))?\s*$/;
+    last if ($Package, $Prefix) =
+      /^MODULE\s*=\s*[\w:]+(?:\s+PACKAGE\s*=\s*([\w:]+))?(?:\s+PREFIX\s*=\s*(\S+))?\s*$/;
     
     print $_;
   }
@@ -323,25 +340,21 @@ EOF
 	   ." followed by a statement on column one?)")
       if $line[0] =~ /^\s/;
     
+    my ($class, $static, $elipsis, $wantRETVAL, $RETVAL_no_return);
+    my (@fake_INPUT_pre);	# For length(s) generated variables
+    my (@fake_INPUT);
+    
     # initialize info arrays
     undef(%args_match);
     undef(%var_types);
     undef(%defaults);
-    undef($class);
-    undef($static);
-    undef($elipsis);
-    undef($wantRETVAL) ;
-    undef($RETVAL_no_return) ;
     undef(%arg_list) ;
     undef(@proto_arg) ;
-    undef(@fake_INPUT_pre) ;	# For length(s) generated variables
-    undef(@fake_INPUT) ;
     undef($processing_arg_with_types) ;
     undef(%argtype_seen) ;
     undef(@outlist) ;
     undef(%in_out) ;
     undef(%lengthof) ;
-    # undef(%islengthof) ;
     undef($proto_in_this_xsub) ;
     undef($scope_in_this_xsub) ;
     undef($interface);
@@ -353,7 +366,7 @@ EOF
     $xsreturn = 0;
 
     $_ = shift(@line);
-    while ($kwd = check_keyword("REQUIRE|PROTOTYPES|FALLBACK|VERSIONCHECK|INCLUDE")) {
+    while (my $kwd = check_keyword("REQUIRE|PROTOTYPES|FALLBACK|VERSIONCHECK|INCLUDE")) {
       &{"${kwd}_handler"}() ;
       next PARAGRAPH unless @line ;
       $_ = shift(@line);
@@ -361,7 +374,7 @@ EOF
 
     if (check_keyword("BOOT")) {
       &check_cpp;
-      push (@BootCode, "#line $line_no[@line_no - @line] \"$filename\"")
+      push (@BootCode, "#line $line_no[@line_no - @line] \"$filepathname\"")
 	if $WantLineNumbers && $line[0] !~ /^\s*#\s*line\b/;
       push (@BootCode, @line, "") ;
       next PARAGRAPH ;
@@ -397,7 +410,7 @@ EOF
     }
 
     # Check for duplicate function definition
-    for $tmp (@XSStack) {
+    for my $tmp (@XSStack) {
       next unless defined $tmp->{functions}{$Full_func_name};
       Warn("Warning: duplicate function definition '$clean_func_name' detected");
       last;
@@ -407,6 +420,7 @@ EOF
     $DoSetMagic = 1;
 
     $orig_args =~ s/\\\s*/ /g;	# process line continuations
+    my @args;
 
     my %only_C_inlist;		# Not in the signature of Perl function
     if ($process_argtypes and $orig_args =~ /\S/) {
@@ -476,7 +490,7 @@ EOF
     @args_num = ();
     $num_args = 0;
     my $report_args = '';
-    foreach $i (0 .. $#args) {
+    foreach my $i (0 .. $#args) {
       if ($args[$i] =~ s/\.\.\.//) {
 	$elipsis = 1;
 	if ($args[$i] eq '' && $i == $#args) {
@@ -559,13 +573,19 @@ EOF
 #	Perl_croak(aTHX_ "Usage: $pname($report_args)");
 EOF
     
-    #gcc -Wall: if an xsub has no arguments and PPCODE is used
-    #it is likely none of ST, XSRETURN or XSprePUSH macros are used
+     # cv doesn't seem to be used, in most cases unless we go in 
+     # the if of this else
+     print Q(<<"EOF");
+#    PERL_UNUSED_VAR(cv); /* -W */
+EOF
+
+    #gcc -Wall: if an xsub has PPCODE is used
+    #it is possible none of ST, XSRETURN or XSprePUSH macros are used
     #hence `ax' (setup by dXSARGS) is unused
     #XXX: could breakup the dXSARGS; into dSP;dMARK;dITEMS
     #but such a move could break third-party extensions
-    print Q(<<"EOF") if $PPCODE and $num_args == 0;
-#   PERL_UNUSED_VAR(ax); /* -Wall */
+    print Q(<<"EOF") if $PPCODE;
+#    PERL_UNUSED_VAR(ax); /* -Wall */
 EOF
 
     print Q(<<"EOF") if $PPCODE;
@@ -592,10 +612,10 @@ EOF
       $deferred = "";
       %arg_list = () ;
       $gotRETVAL = 0;
-      
+	
       INPUT_handler() ;
       process_keyword("INPUT|PREINIT|INTERFACE_MACRO|C_ARGS|ALIAS|ATTRS|PROTOTYPE|SCOPE|OVERLOAD") ;
-      
+
       print Q(<<"EOF") if $ScopeThisXSUB;
 #   ENTER;
 #   [[
@@ -886,6 +906,11 @@ EOF
 
   print Q("#\n");
 
+  print Q(<<"EOF");
+#    PERL_UNUSED_VAR(cv); /* -W */
+#    PERL_UNUSED_VAR(items); /* -W */
+EOF
+    
   print Q(<<"EOF") if $WantVersionChk ;
 #    XS_VERSION_BOOTCHECK ;
 #
@@ -993,7 +1018,7 @@ sub print_section {
     # the "do" is required for right semantics
     do { $_ = shift(@line) } while !/\S/ && @line;
 
-    print("#line ", $line_no[@line_no - @line -1], " \"$filename\"\n")
+    print("#line ", $line_no[@line_no - @line -1], " \"$filepathname\"\n")
 	if $WantLineNumbers && !/^\s*#\s*line\b/ && !/^#if XSubPPtmp/;
     for (;  defined($_) && !/^$BLOCK_re/o;  $_ = shift(@line)) {
 	print "$_\n";
