@@ -10,7 +10,7 @@ require Exporter;
 
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(process_file);
-$VERSION = '2.02';
+$VERSION = '2.03';
 
 #use strict;  # That'll always be the dream...
 
@@ -420,7 +420,7 @@ EOF
 	  my ($pre, $name) = ($arg =~ /(.*?) \s*
 					     \b ( \w+ | length\( \s*\w+\s* \) )
 					     \s* $ /x);
-	  next unless length $pre;
+	  next unless defined($pre) && length($pre);
 	  my $out_type;
 	  my $inout_var;
 	  if ($process_inout and s/^(IN|IN_OUTLIST|OUTLIST|OUT|IN_OUT)\s+//) {
