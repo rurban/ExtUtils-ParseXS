@@ -1,5 +1,10 @@
 Revision history for Perl extension ExtUtils::ParseXS.
 
+2.16  Fri Sep 15 22:33:24 CDT 2006
+
+ - Fix a problem with PREFIX not working inside INTERFACE
+   sections. [Salvador Fandin~o]
+
 2.15  Mon Oct 10 11:02:13 EDT 2005
 
  - I accidentally left out a README from the distribution.  Now it's
