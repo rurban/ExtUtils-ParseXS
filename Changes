@@ -1,5 +1,18 @@
 Revision history for Perl extension ExtUtils::ParseXS.
 
+ - Stacked $filepathname to make #line directives in #INCLUDEs work.
+   [Nicholas Clark]
+
+ - Sprinked dVAR in with dXSARGS, for God-(Jarkko)-knows-what
+   reason. [Jarkko Hietaniemi]
+
+ - Use printf-style formats in Perl_croak() for some significant
+   savings in number of distinct constant strings in the linked
+   binaries we create. [Alexey Tourbin]
+
+ - Don't use 'class' as a variable name in the t/XSTest.xs module,
+   since that's a keyword in C++. [Jarkko Hietaniemi]
+
 2.16  Fri Sep 15 22:33:24 CDT 2006
 
  - Fix a problem with PREFIX not working inside INTERFACE
