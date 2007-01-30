@@ -1,5 +1,16 @@
 Revision history for Perl extension ExtUtils::ParseXS.
 
+ - Added some UNITCHECK stuff, which (I think) makes XS code able to
+   do UNITCHECK blocks. [Nicholas Clark]
+
+ - Changed 'use re "eval";' to 'BEGIN { $^H |= 0x00200000 };' so we
+   can compile re.xs in bleadperl. [Yves Orton]
+
+ - Fix an undefined-variable warning related to 'inout' parameter
+   processing.
+
+2.17 - Mon Nov 20 17:07:27 2006
+
  - Stacked $filepathname to make #line directives in #INCLUDEs work.
    [Nicholas Clark]
 
