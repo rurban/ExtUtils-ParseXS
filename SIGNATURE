@@ -1,0 +1,38 @@
+This file contains message digests of all files listed in MANIFEST,
+signed via the Module::Signature module, version 0.55.
+
+To verify the content in this distribution, first make sure you have
+Module::Signature installed, then type:
+
+    % cpansign -v
+
+It will check each file's integrity, as well as the signature's
+validity.  If "==> Signature verified OK! <==" is not displayed,
+the distribution may already have been compromised, and you should
+not run its Makefile.PL or Build.PL.
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA1
+
+SHA1 dfaa4bce2d71156d2c7aec8cfeb9ff79fb701ad8 Build.PL
+SHA1 898bb0fdd65df1f69cc232a4b090d17cdef6c48b Changes
+SHA1 def6ac9f0149bcbf1d5014ccf9ce66e580d10a4f INSTALL
+SHA1 67d58ed0a59214d3e57760cce303f7c96717bd7d MANIFEST
+SHA1 c18c969a08fd9e3e270f6aa45cf286bd99acf8a2 META.yml
+SHA1 caacf7cc42147fceb1c621e3274e396b57727c66 Makefile.PL
+SHA1 3f573d3f766118036c8cbf12cbfd6e9943e8d6d6 README
+SHA1 b27fc6bce4532fa287018ce72642ab63009bdb31 lib/ExtUtils/ParseXS.pm
+SHA1 8cdfba6fc8bb874f065e3633e675bbfb5ead82c7 lib/ExtUtils/xsubpp
+SHA1 0d5c726dbd386970011b49896f64178beda331d1 t/XSTest.pm
+SHA1 99294eb8eead83a2c4246327812298720e12f316 t/XSTest.xs
+SHA1 42dd6e150a08a289d7ea699fe10b3f09f955de92 t/XSUsage.pm
+SHA1 567dcb296655920c246ddf118f5f7eb22ad816f7 t/XSUsage.xs
+SHA1 477fb529dca97209ed2fdaa6b62dc483fa8d1d69 t/basic.t
+SHA1 d268f358d6b0bea6f14902421664c3e4909702d4 t/usage.t
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.5 (Darwin)
+
+iD8DBQFImml4grvMBLfvlHYRAj+TAJ92IiyNP2D0xE/VWFZQC0f8dTj1+wCdEMZ1
+Q0+naNsXE26EQHbrdLtVUgU=
+=K3l9
+-----END PGP SIGNATURE-----

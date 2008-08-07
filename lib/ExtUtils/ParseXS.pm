@@ -18,7 +18,7 @@ my(@XSStack);	# Stack of conditionals and INCLUDEs
 my($XSS_work_idx, $cpp_next_tmp);
 
 use vars qw($VERSION);
-$VERSION = '2.19';
+$VERSION = '2.19_02';
 
 use vars qw(%input_expr %output_expr $ProtoUsed @InitFileCode $FH $proto_re $Overload $errors $Fallback
 	    $cplusplus $hiertype $WantPrototypes $WantVersionChk $except $WantLineNumbers
@@ -193,8 +193,15 @@ sub process_file {
     close(TYPEMAP);
   }
 
-  foreach my $key (keys %input_expr) {
-    $input_expr{$key} =~ s/;*\s+\z//;
+  foreach my $value (values %input_expr) {
+    $value =~ s/;*\s+\z//;
+    # Move C pre-processor instructions to column 1 to be strictly ANSI
+    # conformant. Some pre-processors are fussy about this.
+    $value =~ s/^\s+#/#/mg;
+  }
+  foreach my $value (values %output_expr) {
+    # And again.
+    $value =~ s/^\s+#/#/mg;
   }
 
   my ($cast, $size);
@@ -298,9 +305,52 @@ EOM
     exit 0; # Not a fatal error for the caller process
   }
 
-    print <<"EOF";
+  print 'ExtUtils::ParseXS::CountLines'->end_marker, "\n" if $WantLineNumbers;
+
+  print <<"EOF";
 #ifndef PERL_UNUSED_VAR
 #  define PERL_UNUSED_VAR(var) if (0) var = var
+#endif
+
+EOF
+
+  print <<"EOF";
+#ifndef PERL_ARGS_ASSERT_CROAK_XS_USAGE
+#define PERL_ARGS_ASSERT_CROAK_XS_USAGE assert(cv); assert(params)
+
+/* prototype to pass -Wmissing-prototypes */
+STATIC void
+S_croak_xs_usage(pTHX_ const CV *const cv, const char *const params);
+
+STATIC void
+S_croak_xs_usage(pTHX_ const CV *const cv, const char *const params)
+{
+    const GV *const gv = CvGV(cv);
+
+    PERL_ARGS_ASSERT_CROAK_XS_USAGE;
+
+    if (gv) {
+        const char *const gvname = GvNAME(gv);
+        const HV *const stash = GvSTASH(gv);
+        const char *const hvname = stash ? HvNAME(stash) : NULL;
+
+        if (hvname)
+            Perl_croak(aTHX_ "Usage: %s::%s(%s)", hvname, gvname, params);
+        else
+            Perl_croak(aTHX_ "Usage: %s(%s)", gvname, params);
+    } else {
+        /* Pants. I don't think that it should be possible to get here. */
+        Perl_croak(aTHX_ "Usage: CODE(0x%"UVxf")(%s)", PTR2UV(cv), params);
+    }
+}
+#undef  PERL_ARGS_ASSERT_CROAK_XS_USAGE
+
+#ifdef PERL_IMPLICIT_CONTEXT
+#define croak_xs_usage(a,b)	S_croak_xs_usage(aTHX_ a,b)
+#else
+#define croak_xs_usage		S_croak_xs_usage
+#endif
+
 #endif
 
 EOF
@@ -360,7 +410,7 @@ EOF
 	   ." followed by a statement on column one?)")
       if $line[0] =~ /^\s/;
     
-    my ($class, $externC, $static, $elipsis, $wantRETVAL, $RETVAL_no_return);
+    my ($class, $externC, $static, $ellipsis, $wantRETVAL, $RETVAL_no_return);
     my (@fake_INPUT_pre);	# For length(s) generated variables
     my (@fake_INPUT);
     
@@ -513,7 +563,7 @@ EOF
     my $report_args = '';
     foreach my $i (0 .. $#args) {
       if ($args[$i] =~ s/\.\.\.//) {
-	$elipsis = 1;
+	$ellipsis = 1;
 	if ($args[$i] eq '' && $i == $#args) {
 	  $report_args .= ", ...";
 	  pop(@args);
@@ -577,7 +627,7 @@ EOF
     print Q(<<"EOF") if $INTERFACE ;
 #    dXSFUNCTION($ret_type);
 EOF
-    if ($elipsis) {
+    if ($ellipsis) {
       $cond = ($min_args ? qq(items < $min_args) : 0);
     } elsif ($min_args == $num_args) {
       $cond = qq(items != $min_args);
@@ -590,22 +640,17 @@ EOF
 #    *errbuf = '\0';
 EOF
 
-    if ($ALIAS)
-      { print Q(<<"EOF") if $cond }
+    if($cond) {
+    print Q(<<"EOF");
 #    if ($cond)
-#       Perl_croak(aTHX_ "Usage: %s(%s)", GvNAME(CvGV(cv)), "$report_args");
+#       croak_xs_usage(cv,  "$report_args");
 EOF
-    else
-      { print Q(<<"EOF") if $cond }
-#    if ($cond)
-#       Perl_croak(aTHX_ "Usage: %s(%s)", "$pname", "$report_args");
-EOF
-    
-     # cv doesn't seem to be used, in most cases unless we go in 
-     # the if of this else
-     print Q(<<"EOF");
+    } else {
+    # cv likely to be unused
+    print Q(<<"EOF");
 #    PERL_UNUSED_VAR(cv); /* -W */
 EOF
+    }
 
     #gcc -Wall: if an xsub has PPCODE is used
     #it is possible none of ST, XSRETURN or XSprePUSH macros are used
@@ -842,7 +887,7 @@ EOF
 	  $proto_arg[$min_args] .= ";" ;
 	}
 	push @proto_arg, "$s\@"
-	  if $elipsis ;
+	  if $ellipsis ;
 	
 	$proto = join ("", grep defined, @proto_arg);
       }
@@ -934,7 +979,7 @@ EOF
   #-Wall: if there is no $Full_func_name there are no xsubs in this .xs
   #so `file' is unused
   print Q(<<"EOF") if $Full_func_name;
-#    char* file = __FILE__;
+#    const char* file = __FILE__;
 EOF
 
   print Q("#\n");
