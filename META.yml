@@ -1,6 +1,6 @@
 ---
 name: ExtUtils-ParseXS
-version: 2.20
+version: 2.20_01
 author:
   - 'Maintained by Ken Williams, <ken@mathforum.org>'
 abstract: converts Perl XS code into C code
@@ -21,8 +21,8 @@ requires:
 provides:
   ExtUtils::ParseXS:
     file: lib/ExtUtils/ParseXS.pm
-    version: 2.20
-generated_by: Module::Build version 0.3305
+    version: 2.20_01
+generated_by: Module::Build version 0.34
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
