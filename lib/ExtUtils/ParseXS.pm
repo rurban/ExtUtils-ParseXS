@@ -18,7 +18,7 @@ my(@XSStack);	# Stack of conditionals and INCLUDEs
 my($XSS_work_idx, $cpp_next_tmp);
 
 use vars qw($VERSION);
-$VERSION = '2.20_03';
+$VERSION = '2.20_04';
 
 use vars qw(%input_expr %output_expr $ProtoUsed @InitFileCode $FH $proto_re $Overload $errors $Fallback
 	    $cplusplus $hiertype $WantPrototypes $WantVersionChk $except $WantLineNumbers
@@ -984,7 +984,11 @@ EOF
   #-Wall: if there is no $Full_func_name there are no xsubs in this .xs
   #so `file' is unused
   print Q(<<"EOF") if $Full_func_name;
-#    $file_decl = __FILE__;
+##if (PERL_REVISION == 5 && PERL_VERSION < 9)
+#    char file[] = __FILE__;
+##else
+#    const char* file = __FILE__;
+##endif
 EOF
 
   print Q("#\n");
@@ -1031,12 +1035,12 @@ EOF
     print "\n    /* End of Initialisation Section */\n\n" ;
   }
 
-  if ($] >= 5.009) {
-    print <<'EOF';
-    if (PL_unitcheckav)
-         call_list(PL_scopestack_ix, PL_unitcheckav);
+  print Q(<<'EOF');
+##ifdef PL_unitcheckav
+#  if (PL_unitcheckav)
+#       call_list(PL_scopestack_ix, PL_unitcheckav);
+##endif
 EOF
-  }
 
   print Q(<<"EOF");
 #    XSRETURN_YES;
