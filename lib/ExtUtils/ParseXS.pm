@@ -18,7 +18,8 @@ my(@XSStack);	# Stack of conditionals and INCLUDEs
 my($XSS_work_idx, $cpp_next_tmp);
 
 use vars qw($VERSION);
-$VERSION = '2.20_04';
+$VERSION = '2.20_05';
+$VERSION = eval $VERSION if $VERSION =~ /_/;
 
 use vars qw(%input_expr %output_expr $ProtoUsed @InitFileCode $FH $proto_re $Overload $errors $Fallback
 	    $cplusplus $hiertype $WantPrototypes $WantVersionChk $except $WantLineNumbers
@@ -436,7 +437,7 @@ EOF
     $xsreturn = 0;
 
     $_ = shift(@line);
-    while (my $kwd = check_keyword("REQUIRE|PROTOTYPES|FALLBACK|VERSIONCHECK|INCLUDE")) {
+    while (my $kwd = check_keyword("REQUIRE|PROTOTYPES|FALLBACK|VERSIONCHECK|INCLUDE|SCOPE")) {
       &{"${kwd}_handler"}() ;
       next PARAGRAPH unless @line ;
       $_ = shift(@line);
@@ -847,7 +848,7 @@ EOF
 	next;
       }
       last if $_ eq "$END:";
-      death(/^$BLOCK_re/o ? "Misplaced `$1:'" : "Junk at end of function");
+      death(/^$BLOCK_re/o ? "Misplaced `$1:'" : "Junk at end of function ($_)");
     }
     
     print Q(<<"EOF") if $except;
@@ -870,8 +871,8 @@ EOF
 #
 EOF
 
-    my $newXS = "newXS" ;
-    my $proto = "" ;
+    our $newXS = "newXS" ;
+    our $proto = "" ;
     
     # Build the prototype string for the xsub
     if ($ProtoThisXSUB) {
@@ -897,23 +898,20 @@ EOF
       }
       $proto = qq{, "$proto"};
     }
-    
+
     if (%XsubAliases) {
       $XsubAliases{$pname} = 0
 	unless defined $XsubAliases{$pname} ;
       while ( ($name, $value) = each %XsubAliases) {
 	push(@InitFileCode, Q(<<"EOF"));
-#        cv = newXS(\"$name\", XS_$Full_func_name, file);
+#        cv = ${newXS}(\"$name\", XS_$Full_func_name, file$proto);
 #        XSANY.any_i32 = $value ;
-EOF
-	push(@InitFileCode, Q(<<"EOF")) if $proto;
-#        sv_setpv((SV*)cv$proto) ;
 EOF
       }
     }
     elsif (@Attributes) {
       push(@InitFileCode, Q(<<"EOF"));
-#        cv = newXS(\"$pname\", XS_$Full_func_name, file);
+#        cv = ${newXS}(\"$pname\", XS_$Full_func_name, file$proto);
 #        apply_attrs_string("$Package", cv, "@Attributes", 0);
 EOF
     }
@@ -921,11 +919,8 @@ EOF
       while ( ($name, $value) = each %Interfaces) {
 	$name = "$Package\::$name" unless $name =~ /::/;
 	push(@InitFileCode, Q(<<"EOF"));
-#        cv = newXS(\"$name\", XS_$Full_func_name, file);
+#        cv = ${newXS}(\"$name\", XS_$Full_func_name, file$proto);
 #        $interface_macro_set(cv,$value) ;
-EOF
-	push(@InitFileCode, Q(<<"EOF")) if $proto;
-#        sv_setpv((SV*)cv$proto) ;
 EOF
       }
     }
@@ -950,7 +945,7 @@ EOF
     /* Making a sub named "${Package}::()" allows the package */
     /* to be findable via fetchmethod(), and causes */
     /* overload::Overloaded("${Package}") to return true. */
-    newXS("${Package}::()", XS_${Packid}_nil, file$proto);
+    ${newXS}("${Package}::()", XS_${Packid}_nil, file$proto);
 MAKE_FETCHMETHOD_WORK
   }
 
@@ -1361,7 +1356,7 @@ sub OVERLOAD_handler()
       $Overload = 1 unless $Overload;
       my $overload = "$Package\::(".$1 ;
       push(@InitFileCode,
-	   "        newXS(\"$overload\", XS_$Full_func_name, file$proto);\n");
+	   "        ${newXS}(\"$overload\", XS_$Full_func_name, file$proto);\n");
     }
   }  
 }
@@ -1455,16 +1450,10 @@ sub SCOPE_handler ()
     death("Error: Only 1 SCOPE declaration allowed per xsub")
       if $scope_in_this_xsub ++ ;
 
-    for (;  !/^$BLOCK_re/o;  $_ = shift(@line)) {
-      next unless /\S/;
-      TrimWhitespace($_) ;
-      if ($_ =~ /^DISABLE/i) {
-	$ScopeThisXSUB = 0
-      } elsif ($_ =~ /^ENABLE/i) {
-	$ScopeThisXSUB = 1
-      }
-    }
-
+    TrimWhitespace($_);
+    death ("Error: SCOPE: ENABLE/DISABLE")
+        unless /^(ENABLE|DISABLE)\b/i;
+    $ScopeThisXSUB = ( uc($1) eq 'ENABLE' );
   }
 
 sub PROTOTYPES_handler ()
