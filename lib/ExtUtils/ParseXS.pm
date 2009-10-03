@@ -18,7 +18,7 @@ my(@XSStack);	# Stack of conditionals and INCLUDEs
 my($XSS_work_idx, $cpp_next_tmp);
 
 use vars qw($VERSION);
-$VERSION = '2.20_06';
+$VERSION = '2.20_07';
 $VERSION = eval $VERSION if $VERSION =~ /_/;
 
 use vars qw(%input_expr %output_expr $ProtoUsed @InitFileCode $FH $proto_re $Overload $errors $Fallback
@@ -988,7 +988,7 @@ EOF
   #so `file' is unused
   print Q(<<"EOF") if $Full_func_name;
 ##if (PERL_REVISION == 5 && PERL_VERSION < 9)
-#    char file[] = __FILE__;
+#    char* file = __FILE__;
 ##else
 #    const char* file = __FILE__;
 ##endif
