@@ -92,10 +92,15 @@ FUNCTIONS
 AUTHOR
     Based on xsubpp code, written by Larry Wall.
 
-    Maintained by Ken Williams, <ken@mathforum.org>
+    Maintained by:
+
+    *   Ken Williams, <ken@mathforum.org>
+
+    *   David Golden, <dagolden@cpan.org>
 
 COPYRIGHT
-    Copyright 2002-2003 Ken Williams. All rights reserved.
+    Copyright 2002-2009 by Ken Williams, David Golden and other
+    contributors. All rights reserved.
 
     This library is free software; you can redistribute it and/or modify it
     under the same terms as Perl itself.
