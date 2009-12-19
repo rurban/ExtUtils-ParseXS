@@ -18,7 +18,7 @@ my(@XSStack);	# Stack of conditionals and INCLUDEs
 my($XSS_work_idx, $cpp_next_tmp);
 
 use vars qw($VERSION);
-$VERSION = '2.21_01';
+$VERSION = '2.21_02';
 $VERSION = eval $VERSION if $VERSION =~ /_/;
 
 use vars qw(%input_expr %output_expr $ProtoUsed @InitFileCode $FH $proto_re $Overload $errors $Fallback
@@ -1564,9 +1564,9 @@ sub INCLUDE_COMMAND_handler ()
     death("INCLUDE_COMMAND: pipes are illegal")
       if /^\s*\|/ or /\|\s*$/ ;
 
-    $FH = Symbol::gensym();
-
     PushXSStack();
+
+    $FH = Symbol::gensym();
 
     # If $^X is used in INCLUDE_COMMAND, we know it's supposed to be
     # the same perl interpreter as we're currently running
