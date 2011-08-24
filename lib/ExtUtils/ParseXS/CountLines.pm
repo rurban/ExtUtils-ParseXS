@@ -1,5 +1,8 @@
 package ExtUtils::ParseXS::CountLines;
 use strict;
+
+our $VERSION = '3.03_03';
+
 our $SECTION_END_MARKER;
 
 sub TIEHANDLE {

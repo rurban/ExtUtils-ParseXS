@@ -8,8 +8,16 @@ use Exporter;
 use File::Basename;
 use File::Spec;
 use Symbol;
-use ExtUtils::ParseXS::Constants ();
-use ExtUtils::ParseXS::CountLines;
+
+our $VERSION;
+BEGIN {
+  $VERSION = '3.03_03';
+}
+use ExtUtils::ParseXS::Constants $VERSION;
+use ExtUtils::ParseXS::CountLines $VERSION;
+use ExtUtils::ParseXS::Utilities $VERSION;
+$VERSION = eval $VERSION if $VERSION =~ /_/;
+
 use ExtUtils::ParseXS::Utilities qw(
   standard_typemap_locations
   trim_whitespace
@@ -35,8 +43,6 @@ our @EXPORT_OK = qw(
   process_file
   report_error_count
 );
-our $VERSION = '3.03_02';
-$VERSION = eval $VERSION if $VERSION =~ /_/;
 
 # The scalars in the line below remain as 'our' variables because pulling
 # them into $self led to build problems.  In most cases, strings being
@@ -554,6 +560,7 @@ EOF
     $_ = '';
     check_conditional_preprocessor_statements();
     while (@{ $self->{line} }) {
+
       $self->CASE_handler($_) if $self->check_keyword("CASE");
       print Q(<<"EOF");
 #   $self->{except} [[
@@ -565,7 +572,6 @@ EOF
       $self->{deferred} = "";
       %{ $self->{arg_list} } = ();
       $self->{gotRETVAL} = 0;
-
       $self->INPUT_handler($_);
       $self->process_keyword("INPUT|PREINIT|INTERFACE_MACRO|C_ARGS|ALIAS|ATTRS|PROTOTYPE|SCOPE|OVERLOAD");
 
@@ -1084,6 +1090,8 @@ sub INPUT_handler {
     my $var_init = '';
     $var_init = $1 if s/\s*([=;+].*)$//s;
     $var_init =~ s/"/\\"/g;
+    # *sigh* It's valid to supply explicit input typemaps in the argument list...
+    my $is_overridden_typemap = $var_init =~ /ST\s*\(|\$arg\b/;
 
     s/\s+/ /g;
     my ($var_type, $var_addr, $var_name) = /^(.*?[^&\s])\s*(\&?)\s*\b(\w+)$/s
@@ -1115,7 +1123,7 @@ sub INPUT_handler {
     if ($self->{var_num}) {
       my $typemap = $self->{typemap}->get_typemap(ctype => $var_type);
       $self->death("Could not find a typemap for C type '$var_type'")
-        if not $typemap;
+        if not $typemap and not $is_overridden_typemap;
       $self->{proto_arg}->[$self->{var_num}] = ($typemap && $typemap->proto) || "\$";
     }
     $self->{func_args} =~ s/\b($var_name)\b/&$1/ if $var_addr;
