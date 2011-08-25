@@ -27,4 +27,4 @@ requires:
   File::Spec: 0
   Symbol: 0
   Test::More: 0.47
-version: 3.03_03
+version: 3.04
