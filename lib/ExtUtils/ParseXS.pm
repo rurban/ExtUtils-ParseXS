@@ -11,7 +11,7 @@ use Symbol;
 
 our $VERSION;
 BEGIN {
-  $VERSION = '3.04_01';
+  $VERSION = '3.04_02';
 }
 use ExtUtils::ParseXS::Constants $VERSION;
 use ExtUtils::ParseXS::CountLines $VERSION;
@@ -522,7 +522,7 @@ EOF
 
     print Q(<<"EOF") if $self->{except};
 #    char errbuf[1024];
-#    *errbuf = '\0';
+#    *errbuf = '\\0';
 EOF
 
     if($self->{cond}) {
