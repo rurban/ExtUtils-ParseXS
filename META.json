@@ -27,7 +27,7 @@
       },
       "configure" : {
          "requires" : {
-            "ExtUtils::MakeMaker" : 0
+            "ExtUtils::MakeMaker" : "6.46"
          }
       },
       "runtime" : {
@@ -37,6 +37,7 @@
             "DynaLoader" : 0,
             "Exporter" : 0,
             "ExtUtils::CBuilder" : 0,
+            "ExtUtils::MakeMaker" : "6.46",
             "File::Basename" : 0,
             "File::Spec" : 0,
             "Symbol" : 0,
@@ -44,6 +45,14 @@
          }
       }
    },
-   "release_status" : "testing",
-   "version" : "3.13_01"
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "http://rt.perl.org/rt3/"
+      },
+      "repository" : {
+         "url" : "git://perl5.git.perl.org/gitroot/perl.git"
+      }
+   },
+   "version" : "3.14"
 }
