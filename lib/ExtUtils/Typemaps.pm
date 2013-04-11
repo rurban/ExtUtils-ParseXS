@@ -2,7 +2,7 @@ package ExtUtils::Typemaps;
 use 5.006001;
 use strict;
 use warnings;
-our $VERSION = '3.18';
+our $VERSION = '3.18_01';
 #use Carp qw(croak);
 
 require ExtUtils::ParseXS;
@@ -110,6 +110,7 @@ sub _init {
     $self->_parse(\$string, $self->{lineno_offset}, $self->{file});
   }
 }
+
 
 =head2 file
 
@@ -880,6 +881,48 @@ sub validate {
   return 1;
 }
 
+=head2 clone
+
+Creates and returns a clone of a full typemaps object.
+
+Takes named parameters: If C<shallow> is true,
+the clone will share the actual individual type/input/outputmap objects,
+but not share their storage. Use with caution. Without C<shallow>,
+the clone will be fully independent.
+
+=cut
+
+sub clone {
+  my $proto = shift;
+  my %args = @_;
+
+  my $self;
+  if ($args{shallow}) {
+    $self = bless( {
+      %$proto,
+      typemap_section => [@{$proto->{typemap_section}}],
+      typemap_lookup  => {%{$proto->{typemap_lookup}}},
+      input_section   => [@{$proto->{input_section}}],
+      input_lookup    => {%{$proto->{input_lookup}}},
+      output_section  => [@{$proto->{output_section}}],
+      output_lookup   => {%{$proto->{output_lookup}}},
+    } => ref($proto) );
+  }
+  else {
+    $self = bless( {
+      %$proto,
+      typemap_section => [map $_->new, @{$proto->{typemap_section}}],
+      typemap_lookup  => {%{$proto->{typemap_lookup}}},
+      input_section   => [map $_->new, @{$proto->{input_section}}],
+      input_lookup    => {%{$proto->{input_lookup}}},
+      output_section  => [map $_->new, @{$proto->{output_section}}],
+      output_lookup   => {%{$proto->{output_lookup}}},
+    } => ref($proto) );
+  }
+
+  return $self;
+}
+
 sub _parse {
   my $self = shift;
   my $stringref = shift;
@@ -1020,7 +1063,7 @@ Steffen Mueller C<<smueller@cpan.org>>
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009, 2010, 2011, 2012 Steffen Mueller
+Copyright 2009, 2010, 2011, 2012, 2013 Steffen Mueller
 
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
