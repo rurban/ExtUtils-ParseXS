@@ -11,7 +11,7 @@ use Symbol;
 
 our $VERSION;
 BEGIN {
-  $VERSION = '3.18_03';
+  $VERSION = '3.18_04';
 }
 use ExtUtils::ParseXS::Constants $VERSION;
 use ExtUtils::ParseXS::CountLines $VERSION;
@@ -25,7 +25,6 @@ use ExtUtils::ParseXS::Utilities qw(
   C_string
   valid_proto_string
   process_typemaps
-  make_targetable
   map_type
   standard_XS_defs
   assign_func_args
@@ -45,21 +44,29 @@ our @EXPORT_OK = qw(
   report_error_count
 );
 
+##############################
+# A number of "constants"
+
 our ($C_group_rex, $C_arg);
-BEGIN {
-  # Group in C (no support for comments or literals)
-  $C_group_rex = qr/ [({\[]
-               (?: (?> [^()\[\]{}]+ ) | (??{ $C_group_rex }) )*
-               [)}\]] /x;
-  # Chunk in C without comma at toplevel (no comments):
-  $C_arg = qr/ (?: (?> [^()\[\]{},"']+ )
-         |   (??{ $C_group_rex })
-         |   " (?: (?> [^\\"]+ )
-           |   \\.
-           )* "        # String literal
-                |   ' (?: (?> [^\\']+ ) | \\. )* ' # Char literal
-         )* /xs;
-}
+# Group in C (no support for comments or literals)
+$C_group_rex = qr/ [({\[]
+             (?: (?> [^()\[\]{}]+ ) | (??{ $C_group_rex }) )*
+             [)}\]] /x;
+# Chunk in C without comma at toplevel (no comments):
+$C_arg = qr/ (?: (?> [^()\[\]{},"']+ )
+       |   (??{ $C_group_rex })
+       |   " (?: (?> [^\\"]+ )
+         |   \\.
+         )* "        # String literal
+              |   ' (?: (?> [^\\']+ ) | \\. )* ' # Char literal
+       )* /xs;
+
+# "impossible" keyword (multiple newline)
+my $END = "!End!\n\n";
+# Match an XS Keyword
+my $BLOCK_regexp = '\s*(' . $ExtUtils::ParseXS::Constants::XSKeywordsAlternation . "|$END)\\s*:";
+
+
 
 sub new {
   return bless {} => shift;
@@ -171,13 +178,6 @@ sub process_file {
   }
 
   $self->{typemap} = process_typemaps( $args{typemap}, $pwd );
-
-  my $END = "!End!\n\n";        # "impossible" keyword (multiple newline)
-
-  # Match an XS keyword
-  $self->{BLOCK_re} = '\s*(' .
-    join('|' => @ExtUtils::ParseXS::Constants::XSKeywords) .
-    "|$END)\\s*:";
 
   # Since at this point we're ready to begin printing to the output file and
   # reading from the input file, I want to get as much data as possible into
@@ -706,34 +706,30 @@ EOF
       }
       elsif ($self->{gotRETVAL} || $wantRETVAL) {
         my $outputmap = $self->{typemap}->get_outputmap( ctype => $self->{ret_type} );
-        my $t = $self->{optimize} && $outputmap && $outputmap->targetable;
+        my $trgt = $self->{optimize} && $outputmap && $outputmap->targetable;
         my $var = 'RETVAL';
         my $type = $self->{ret_type};
 
-        if ($t and not $t->{with_size} and $t->{type} eq 'p') {
-          # PUSHp corresponds to setpvn.  Treat setpv directly
+        if ($trgt) {
           my $what = $self->eval_output_typemap_code(
-            qq("$t->{what}"),
+            qq("$trgt->{what}"),
             {var => $var, type => $self->{ret_type}}
           );
-
-          print "\tsv_setpv(TARG, $what); XSprePUSH; PUSHTARG;\n";
-          $prepush_done = 1;
-        }
-        elsif ($t) {
-          my $what = $self->eval_output_typemap_code(
-            qq("$t->{what}"),
-            {var => $var, type => $self->{ret_type}}
-          );
-
-          my $tsize = $t->{what_size};
-          $tsize = '' unless defined $tsize;
-          $tsize = $self->eval_output_typemap_code(
-            qq("$tsize"),
-            {var => $var, type => $self->{ret_type}}
-          );
-          print "\tXSprePUSH; PUSH$t->{type}($what$tsize);\n";
-          $prepush_done = 1;
+          if (not $trgt->{with_size} and $trgt->{type} eq 'p') { # sv_setpv
+            # PUSHp corresponds to sv_setpvn.  Treat sv_setpv directly
+            print "\tsv_setpv(TARG, $what); XSprePUSH; PUSHTARG;\n";
+            $prepush_done = 1;
+          }
+          else {
+            my $tsize = $trgt->{what_size};
+            $tsize = '' unless defined $tsize;
+            $tsize = $self->eval_output_typemap_code(
+              qq("$tsize"),
+              {var => $var, type => $self->{ret_type}}
+            );
+            print "\tXSprePUSH; PUSH$trgt->{type}($what$tsize);\n";
+            $prepush_done = 1;
+          }
         }
         else {
           # RETVAL almost never needs SvSETMAGIC()
@@ -788,7 +784,7 @@ EOF
         next;
       }
       last if $_ eq "$END:";
-      $self->death(/^$self->{BLOCK_re}/o ? "Misplaced '$1:'" : "Junk at end of function ($_)");
+      $self->death(/^$BLOCK_regexp/o ? "Misplaced '$1:'" : "Junk at end of function ($_)");
     }
 
     print Q(<<"EOF") if $self->{except};
@@ -1025,7 +1021,7 @@ sub print_section {
   print("#line ", $self->{line_no}->[@{ $self->{line_no} } - @{ $self->{line} } -1], " \"",
         escape_file_for_line_directive($self->{filepathname}), "\"\n")
     if $self->{WantLineNumbers} && !/^\s*#\s*line\b/ && !/^#if XSubPPtmp/;
-  for (;  defined($_) && !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
+  for (;  defined($_) && !/^$BLOCK_regexp/o;  $_ = shift(@{ $self->{line} })) {
     print "$_\n";
     $consumed_code .= "$_\n";
   }
@@ -1042,7 +1038,7 @@ sub merge_section {
     $_ = shift(@{ $self->{line} });
   }
 
-  for (;  defined($_) && !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
+  for (;  defined($_) && !/^$BLOCK_regexp/o;  $_ = shift(@{ $self->{line} })) {
     $in .= "$_\n";
   }
   chomp $in;
@@ -1072,7 +1068,7 @@ sub CASE_handler {
 sub INPUT_handler {
   my $self = shift;
   $_ = shift;
-  for (;  !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
+  for (;  !/^$BLOCK_regexp/o;  $_ = shift(@{ $self->{line} })) {
     last if /^\s*NOT_IMPLEMENTED_YET/;
     next unless /\S/;        # skip blank lines
 
@@ -1168,7 +1164,7 @@ sub OUTPUT_handler {
   $self->{have_OUTPUT} = 1;
 
   $_ = shift;
-  for (;  !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
+  for (;  !/^$BLOCK_regexp/o;  $_ = shift(@{ $self->{line} })) {
     next unless /\S/;
     if (/^\s*SETMAGIC\s*:\s*(ENABLE|DISABLE)\s*/) {
       $self->{DoSetMagic} = ($1 eq "ENABLE" ? 1 : 0);
@@ -1307,7 +1303,7 @@ sub ATTRS_handler {
   my $self = shift;
   $_ = shift;
 
-  for (;  !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
+  for (;  !/^$BLOCK_regexp/o;  $_ = shift(@{ $self->{line} })) {
     next unless /\S/;
     trim_whitespace($_);
     push @{ $self->{Attributes} }, $_;
@@ -1318,7 +1314,7 @@ sub ALIAS_handler {
   my $self = shift;
   $_ = shift;
 
-  for (;  !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
+  for (;  !/^$BLOCK_regexp/o;  $_ = shift(@{ $self->{line} })) {
     next unless /\S/;
     trim_whitespace($_);
     $self->get_aliases($_) if $_;
@@ -1329,7 +1325,7 @@ sub OVERLOAD_handler {
   my $self = shift;
   $_ = shift;
 
-  for (;  !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
+  for (;  !/^$BLOCK_regexp/o;  $_ = shift(@{ $self->{line} })) {
     next unless /\S/;
     trim_whitespace($_);
     while ( s/^\s*([\w:"\\)\+\-\*\/\%\<\>\.\&\|\^\!\~\{\}\=]+)\s*//) {
@@ -1342,13 +1338,14 @@ sub OVERLOAD_handler {
 }
 
 sub FALLBACK_handler {
-  my $self = shift;
-  $_ = shift;
+  my ($self, $setting) = @_;
 
   # the rest of the current line should contain either TRUE,
   # FALSE or UNDEF
 
-  trim_whitespace($_);
+  trim_whitespace($setting);
+  $setting = uc($setting);
+
   my %map = (
     TRUE => "&PL_sv_yes", 1 => "&PL_sv_yes",
     FALSE => "&PL_sv_no", 0 => "&PL_sv_no",
@@ -1356,42 +1353,39 @@ sub FALLBACK_handler {
   );
 
   # check for valid FALLBACK value
-  $self->death("Error: FALLBACK: TRUE/FALSE/UNDEF") unless exists $map{uc $_};
+  $self->death("Error: FALLBACK: TRUE/FALSE/UNDEF") unless exists $map{$setting};
 
-  $self->{Fallback} = $map{uc $_};
+  $self->{Fallback} = $map{$setting};
 }
 
 
 sub REQUIRE_handler {
-  my $self = shift;
   # the rest of the current line should contain a version number
-  my $Ver = shift;
+  my ($self, $ver) = @_;
 
-  trim_whitespace($Ver);
+  trim_whitespace($ver);
 
   $self->death("Error: REQUIRE expects a version number")
-    unless $Ver;
+    unless $ver;
 
   # check that the version number is of the form n.n
-  $self->death("Error: REQUIRE: expected a number, got '$Ver'")
-    unless $Ver =~ /^\d+(\.\d*)?/;
+  $self->death("Error: REQUIRE: expected a number, got '$ver'")
+    unless $ver =~ /^\d+(\.\d*)?/;
 
-  $self->death("Error: xsubpp $Ver (or better) required--this is only $VERSION.")
-    unless $VERSION >= $Ver;
+  $self->death("Error: xsubpp $ver (or better) required--this is only $VERSION.")
+    unless $VERSION >= $ver;
 }
 
 sub VERSIONCHECK_handler {
-  my $self = shift;
-  $_ = shift;
-
   # the rest of the current line should contain either ENABLE or
   # DISABLE
+  my ($self, $setting) = @_;
 
-  trim_whitespace($_);
+  trim_whitespace($setting);
 
   # check for ENABLE/DISABLE
   $self->death("Error: VERSIONCHECK: ENABLE/DISABLE")
-    unless /^(ENABLE|DISABLE)/i;
+    unless $setting =~ /^(ENABLE|DISABLE)/i;
 
   $self->{WantVersionChk} = 1 if $1 eq 'ENABLE';
   $self->{WantVersionChk} = 0 if $1 eq 'DISABLE';
@@ -1407,7 +1401,7 @@ sub PROTOTYPE_handler {
   $self->death("Error: Only 1 PROTOTYPE definition allowed per xsub")
     if $self->{proto_in_this_xsub}++;
 
-  for (;  !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
+  for (;  !/^$BLOCK_regexp/o;  $_ = shift(@{ $self->{line} })) {
     next unless /\S/;
     $specified = 1;
     trim_whitespace($_);
@@ -1433,30 +1427,28 @@ sub PROTOTYPE_handler {
 }
 
 sub SCOPE_handler {
-  my $self = shift;
-  $_ = shift;
+  # Rest of line should be either ENABLE or DISABLE
+  my ($self, $setting) = @_;
 
   $self->death("Error: Only 1 SCOPE declaration allowed per xsub")
     if $self->{scope_in_this_xsub}++;
 
-  trim_whitespace($_);
+  trim_whitespace($setting);
   $self->death("Error: SCOPE: ENABLE/DISABLE")
-      unless /^(ENABLE|DISABLE)\b/i;
+      unless $setting =~ /^(ENABLE|DISABLE)\b/i;
   $self->{ScopeThisXSUB} = ( uc($1) eq 'ENABLE' );
 }
 
 sub PROTOTYPES_handler {
-  my $self = shift;
-  $_ = shift;
-
   # the rest of the current line should contain either ENABLE or
   # DISABLE
+  my ($self, $setting) = @_;
 
-  trim_whitespace($_);
+  trim_whitespace($setting);
 
   # check for ENABLE/DISABLE
   $self->death("Error: PROTOTYPES: ENABLE/DISABLE")
-    unless /^(ENABLE|DISABLE)/i;
+    unless $setting =~ /^(ENABLE|DISABLE)/i;
 
   $self->{WantPrototypes} = 1 if $1 eq 'ENABLE';
   $self->{WantPrototypes} = 0 if $1 eq 'DISABLE';
@@ -1464,17 +1456,15 @@ sub PROTOTYPES_handler {
 }
 
 sub EXPORT_XSUB_SYMBOLS_handler {
-  my $self = shift;
-  $_ = shift;
-
   # the rest of the current line should contain either ENABLE or
   # DISABLE
+  my ($self, $setting) = @_;
 
-  trim_whitespace($_);
+  trim_whitespace($setting);
 
   # check for ENABLE/DISABLE
   $self->death("Error: EXPORT_XSUB_SYMBOLS: ENABLE/DISABLE")
-    unless /^(ENABLE|DISABLE)/i;
+    unless $setting =~ /^(ENABLE|DISABLE)/i;
 
   my $xs_impl = $1 eq 'ENABLE' ? 'XS_EXTERNAL' : 'XS_INTERNAL';
 
