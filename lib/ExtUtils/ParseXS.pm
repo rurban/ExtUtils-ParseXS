@@ -11,7 +11,7 @@ use Symbol;
 
 our $VERSION;
 BEGIN {
-  $VERSION = '3.18_04';
+  $VERSION = '3.21';
 }
 use ExtUtils::ParseXS::Constants $VERSION;
 use ExtUtils::ParseXS::CountLines $VERSION;
@@ -179,18 +179,11 @@ sub process_file {
 
   $self->{typemap} = process_typemaps( $args{typemap}, $pwd );
 
-  # Since at this point we're ready to begin printing to the output file and
-  # reading from the input file, I want to get as much data as possible into
-  # the proto-object $self.  That means assigning to $self and elements of
-  # %args referenced below this point.
-  # HOWEVER:  This resulted in an error when I tried:
-  #   $args{'s'} ---> $self->{s}.
-  # Use of uninitialized value in quotemeta at
-  #   .../blib/lib/ExtUtils/ParseXS.pm line 733
-
+  # Move more settings from parameters to object
   foreach my $datum ( qw| argtypes except inout optimize | ) {
     $self->{$datum} = $args{$datum};
   }
+  $self->{strip_c_func_prefix} = $args{s};
 
   # Identify the version of xsubpp used
   print <<EOM;
@@ -670,8 +663,9 @@ EOF
               print "THIS->";
             }
           }
-          $self->{func_name} =~ s/^\Q$args{'s'}//
-            if exists $args{'s'};
+          my $strip = $self->{strip_c_func_prefix};
+          $self->{func_name} =~ s/^\Q$strip//
+            if defined $strip;
           $self->{func_name} = 'XSFUNCTION' if $self->{interface};
           print "$self->{func_name}($self->{func_args});\n";
         }
@@ -839,7 +833,8 @@ EOF
     if (%{ $self->{XsubAliases} }) {
       $self->{XsubAliases}->{ $self->{pname} } = 0
         unless defined $self->{XsubAliases}->{ $self->{pname} };
-      while ( my ($xname, $value) = each %{ $self->{XsubAliases} }) {
+      foreach my $xname (sort keys %{ $self->{XsubAliases} }) {
+        my $value = $self->{XsubAliases}{$xname};
         push(@{ $self->{InitFileCode} }, Q(<<"EOF"));
 #        cv = $self->{newXS}(\"$xname\", XS_$self->{Full_func_name}, file$self->{proto});
 #        XSANY.any_i32 = $value;
@@ -853,7 +848,8 @@ EOF
 EOF
     }
     elsif ($self->{interface}) {
-      while ( my ($yname, $value) = each %{ $self->{Interfaces} }) {
+      foreach my $yname (sort keys %{ $self->{Interfaces} }) {
+        my $value = $self->{Interfaces}{$yname};
         $yname = "$self->{Package}\::$yname" unless $yname =~ /::/;
         push(@{ $self->{InitFileCode} }, Q(<<"EOF"));
 #        cv = $self->{newXS}(\"$yname\", XS_$self->{Full_func_name}, file$self->{proto});
@@ -1633,7 +1629,7 @@ sub PopFile {
   close $self->{FH};
 
   $self->{FH}         = $data->{Handle};
-  # $filename is the leafname, which for some reason isused for diagnostic
+  # $filename is the leafname, which for some reason is used for diagnostic
   # messages, whereas $filepathname is the full pathname, and is used for
   # #line directives.
   $self->{filename}   = $data->{Filename};
@@ -1963,17 +1959,24 @@ sub generate_output {
       print "\t\tSvSETMAGIC(ST(ix_$var));\n" if $do_setmagic;
     }
     elsif ($var eq 'RETVAL') {
-      if ($expr =~ /^\t\$arg = new/) {
+      my $evalexpr = $self->eval_output_typemap_code("qq\a$expr\a", $eval_vars);
+      if ($expr =~ /^\t\Q$arg\E = new/) {
         # We expect that $arg has refcnt 1, so we need to
         # mortalize it.
-        $self->eval_output_typemap_code("print qq\a$expr\a", $eval_vars);
+        print $evalexpr;
         print "\tsv_2mortal(ST($num));\n";
         print "\tSvSETMAGIC(ST($num));\n" if $do_setmagic;
       }
-      elsif ($expr =~ /^\s*\$arg\s*=/) {
+      # If RETVAL is immortal, don't mortalize it. This code is not perfect:
+      # It won't detect a func or expression that only returns immortals, for
+      # example, this RE must be tried before next elsif.
+      elsif ($evalexpr =~ /^\t\Q$arg\E\s*=\s*(boolSV\(|(&PL_sv_yes|&PL_sv_no|&PL_sv_undef)\s*;)/) {
+        print $evalexpr;
+      }
+      elsif ($evalexpr =~ /^\s*\Q$arg\E\s*=/) {
         # We expect that $arg has refcnt >=1, so we need
         # to mortalize it!
-        $self->eval_output_typemap_code("print qq\a$expr\a", $eval_vars);
+        print $evalexpr;
         print "\tsv_2mortal(ST(0));\n";
         print "\tSvSETMAGIC(ST(0));\n" if $do_setmagic;
       }
@@ -1981,9 +1984,9 @@ sub generate_output {
         # Just hope that the entry would safely write it
         # over an already mortalized value. By
         # coincidence, something like $arg = &sv_undef
-        # works too.
+        # works too, but should be caught above.
         print "\tST(0) = sv_newmortal();\n";
-        $self->eval_output_typemap_code("print qq\a$expr\a", $eval_vars);
+        print $evalexpr;
         # new mortals don't have set magic
       }
     }

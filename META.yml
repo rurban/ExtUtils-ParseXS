@@ -31,4 +31,4 @@ requires:
 resources:
   bugtracker: http://rt.perl.org/rt3/
   repository: git://perl5.git.perl.org/gitroot/perl.git
-version: 3.18_04
+version: 3.21

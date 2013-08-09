@@ -45,7 +45,7 @@
          }
       }
    },
-   "release_status" : "testing",
+   "release_status" : "stable",
    "resources" : {
       "bugtracker" : {
          "web" : "http://rt.perl.org/rt3/"
@@ -54,5 +54,5 @@
          "url" : "git://perl5.git.perl.org/gitroot/perl.git"
       }
    },
-   "version" : "3.18_04"
+   "version" : "3.21"
 }
