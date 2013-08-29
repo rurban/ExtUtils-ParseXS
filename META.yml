@@ -21,7 +21,7 @@ requires:
   Carp: 0
   Cwd: 0
   DynaLoader: 0
-  Exporter: 0
+  Exporter: 5.57
   ExtUtils::CBuilder: 0
   ExtUtils::MakeMaker: 6.46
   File::Basename: 0
@@ -31,4 +31,4 @@ requires:
 resources:
   bugtracker: http://rt.perl.org/rt3/
   repository: git://perl5.git.perl.org/gitroot/perl.git
-version: 3.21
+version: 3.22
