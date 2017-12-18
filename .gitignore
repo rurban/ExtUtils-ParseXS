@@ -1,0 +1,17 @@
+/log.*
+*~
+/ExtUtils-ParseXS-*
+/.gdbinit
+/.bash_history
+/*.patch
+/META.yml
+/MYMETA.json
+/MYMETA.yml
+/Makefile
+/Makefile.old
+*.bs
+/blib
+/pm_to_blib
+/nohup.out
+/Debian_CPANTS.txt
+cover_db/
