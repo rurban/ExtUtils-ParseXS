@@ -1,90 +1,51 @@
-use 5.006001;
+#-*- buffer-read-only: t -*-
+
+# This Makefile.PL was written by make_ext.pl.
+# It will be deleted automatically by make realclean
+
 use strict;
-use warnings;
-use ExtUtils::MakeMaker 6.46;
+use ExtUtils::MakeMaker;
 
-use Config '%Config';
-use File::Spec;
+# This is what the .PL extracts to. Not the ultimate file that is installed.
+# (ie Win32 runs pl2bat after this)
 
-# It's a weirdness in ExtUtils::MakeMaker that, when searching for xsubpp,
-# it searches @INC for $path/ExtUtils/xsubpp instead of looking for an
-# executable in the $PATH or whatever.
-# EU::MM will pick up whatever xsubpp is found first in @INC.
-# Thus, we must at least warn the user when we're about to install a new
-# xsubpp to a location that may be shadowed by an old one.
+# Doing this here avoids all sort of quoting issues that would come from
+# attempting to write out perl source with literals to generate the arrays and
+# hash.
+my @temps = 'Makefile.PL';
+foreach (glob('scripts/pod*.PL')) {
+    # The various pod*.PL extractors change directory. Doing that with relative
+    # paths in @INC breaks. It seems the lesser of two evils to copy (to avoid)
+    # the chdir doing anything, than to attempt to convert lib paths to
+    # absolute, and potentially run into problems with quoting special
+    # characters in the path to our build dir (such as spaces)
+    require File::Copy;
 
-my $whereto = ($] > 5.010001 ? 'site' : 'perl');
-my $instdir = $whereto eq 'site' ? $Config{installsitelib} : $Config{installprivlib};
-$instdir = File::Spec->canonpath($instdir);
-
-my $target_xsubpp = File::Spec->catfile($instdir, 'ExtUtils', 'xsubpp');
-my @shadowing_xsubpps;
-foreach my $dir (grep !ref, @INC) {
-  my $cpath = File::Spec->canonpath($dir);
-  my $test_xsubpp = File::Spec->catdir($cpath, 'ExtUtils', 'xsubpp');
-  last if $cpath eq $instdir or $target_xsubpp eq $test_xsubpp;
-  if (-r $test_xsubpp) {
-    push @shadowing_xsubpps, $test_xsubpp;
-  }
+    my $temp = $_;
+    $temp =~ s!scripts/!!;
+    File::Copy::copy($_, $temp) or die "Can't copy $temp to $_: $!";
+    push @temps, $temp;
 }
-if (@shadowing_xsubpps) {
-  my $problems = join("\n  ", @shadowing_xsubpps);
-  warn <<HERE;
 
-==========================================================
- WARNING WARNING WARNING WARNING WARNING WARNING WARNING
-==========================================================
-I detected that an old version of 'xsubpp' will shadow the
-new, to-be-installed 'xsubpp' (which you need to install
-XS modules) after installation.
-This is likely because an old version was installed
-wrongly or because your vendor patched your perl. You can
-continue with the installation but afterwards, you may
-have to remove all copies of 'xsubpp' that shadow this
-one for future module installations. Failure to do so may
-result in your being unable to install XS modules.
-But as long as you keep this in mind, nothing is going to
-break your system if you do nothing.
-
-Problematic copies of 'xsubpp' found:
-  $problems
-
-==========================================================
- WARNING WARNING WARNING WARNING WARNING WARNING WARNING
-==========================================================
-
-HERE
-  sleep 2;
+my $script_ext = $^O eq 'VMS' ? '.com' : '';
+my %pod_scripts;
+foreach (glob('pod*.PL')) {
+    my $script = $_;
+    s/.PL$/$script_ext/i;
+    $pod_scripts{$script} = $_;
 }
+my @exe_files = values %pod_scripts;
 
 WriteMakefile(
-  'NAME' => 'ExtUtils::ParseXS',
-  'VERSION_FROM' => 'lib/ExtUtils/ParseXS.pm',
-  'PREREQ_PM' => {
-    'Carp' => 0,
-    'Cwd' => 0,
-    'DynaLoader' => 0,
-    'Exporter' => '5.57',
-    'ExtUtils::CBuilder' => 0,
-    'File::Basename' => 0,
-    'File::Spec' => 0,
-    'Symbol' => 0,
-    'Test::More' => '0.47',
-    'ExtUtils::MakeMaker' => '6.46',
-  },
-  CONFIGURE_REQUIRES => {
-    'ExtUtils::MakeMaker' => '6.46',
-  },
-  META_MERGE => {
-    resources => {
-      bugtracker => 'http://rt.perl.org/rt3/',
-      repository => 'git://perl5.git.perl.org/gitroot/perl.git',
-    },
-  },
-  ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
-    (ABSTRACT_FROM  => 'lib/ExtUtils/ParseXS.pod',
-     AUTHOR         => 'Ken Williams <ken@mathforum.org>') : ()),
-  'INSTALLDIRS' => $whereto,
-  'EXE_FILES' => ['lib/ExtUtils/xsubpp'],
-  'PL_FILES' => {}
+    NAME          => 'ExtUtils::ParseXS',
+    VERSION_FROM  => 'lib/ExtUtils/ParseXS.pm',
+    ABSTRACT_FROM => 'lib/ExtUtils/ParseXS.pod',
+    realclean     => { FILES => "@temps" },
+    (%pod_scripts ? (
+        PL_FILES  => \%pod_scripts,
+        EXE_FILES => \@exe_files,
+        clean     => { FILES => "@exe_files" },
+    ) : ()),
 );
+
+# ex: set ro:
